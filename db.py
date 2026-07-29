@@ -1,5 +1,6 @@
 import aiosqlite
 import logging
+from datetime import datetime, date
 from typing import List, Dict, Any, Optional
 from config import DB_PATH
 
@@ -44,8 +45,21 @@ async def init_db():
                 FOREIGN KEY (user_id) REFERENCES users(user_id)
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS bot_meta (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
         
-        # Migrations for existing DB tables
+        await db.execute(
+            "INSERT OR IGNORE INTO bot_meta (key, value) VALUES ('server_start_date', ?)",
+            (date.today().strftime("%Y-%m-%d"),)
+        )
+        await db.execute(
+            "INSERT OR IGNORE INTO bot_meta (key, value) VALUES ('last_host_notified_at', '')"
+        )
+        
         cursor = await db.execute("PRAGMA table_info(subscriptions)")
         columns = [row[1] for row in await cursor.fetchall()]
         
@@ -65,7 +79,6 @@ async def init_db():
             if col_name not in columns:
                 await db.execute(f"ALTER TABLE subscriptions ADD COLUMN {col_name} {col_type}")
 
-        # Check users table migrations
         cursor_u = await db.execute("PRAGMA table_info(users)")
         u_columns = [row[1] for row in await cursor_u.fetchall()]
         if "dnd_enabled" not in u_columns:
@@ -84,6 +97,12 @@ async def register_user(user_id: int, username: Optional[str] = None):
         )
         await db.commit()
 
+async def get_all_user_ids() -> List[int]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT user_id FROM users") as cursor:
+            rows = await cursor.fetchall()
+            return [row[0] for row in rows]
+
 async def get_user_settings(user_id: int) -> Dict[str, Any]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
@@ -93,11 +112,17 @@ async def get_user_settings(user_id: int) -> Dict[str, Any]:
                 return dict(row)
             return {"user_id": user_id, "dnd_enabled": 0, "dnd_start": 23, "dnd_end": 7}
 
-async def update_user_dnd(user_id: int, enabled: int, start: int = 23, end: int = 7):
+async def get_bot_meta(key: str) -> Optional[str]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT value FROM bot_meta WHERE key = ?", (key,)) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else None
+
+async def set_bot_meta(key: str, value: str):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            "UPDATE users SET dnd_enabled = ?, dnd_start = ?, dnd_end = ? WHERE user_id = ?",
-            (enabled, start, end, user_id)
+            "INSERT INTO bot_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?",
+            (key, value, value)
         )
         await db.commit()
 
