@@ -6,17 +6,12 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-# Устанавливаем прокси для библиотек requests и rzd_api на PythonAnywhere
-if not os.getenv("HTTP_PROXY"):
-    if os.path.exists("/home/newnew1212") or "pythonanywhere" in os.getcwd().lower() or os.path.exists("/etc/pythonanywhere"):
-        os.environ["HTTP_PROXY"] = "http://proxy.server:3128"
-        os.environ["HTTPS_PROXY"] = "http://proxy.server:3128"
-
 from config import BOT_TOKEN, CHECK_INTERVAL_MINUTES
 from db import init_db
 from handlers import main_router
 from services.checker import check_all_subscriptions
 
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -37,8 +32,8 @@ async def main():
     logger.info("Initializing database...")
     await init_db()
 
+    # Optional proxy if set explicitly in environment
     proxy_url = os.getenv("HTTP_PROXY") or os.getenv("http_proxy")
-
     if proxy_url:
         logger.info(f"Using HTTP Proxy: {proxy_url}")
         session = AiohttpSession(proxy=proxy_url)
