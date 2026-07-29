@@ -1,7 +1,9 @@
+import os
+import sys
 import asyncio
 import logging
-import sys
 from aiogram import Bot, Dispatcher
+from aiogram.client.session.aiohttp import AiohttpSession
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from config import BOT_TOKEN, CHECK_INTERVAL_MINUTES
@@ -9,7 +11,6 @@ from db import init_db
 from handlers import main_router
 from services.checker import check_all_subscriptions
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -30,18 +31,29 @@ async def main():
     logger.info("Initializing database...")
     await init_db()
 
-    bot = Bot(token=BOT_TOKEN)
+    # Detect PythonAnywhere proxy
+    proxy_url = os.getenv("HTTP_PROXY") or os.getenv("http_proxy")
+    if not proxy_url:
+        if os.path.exists("/home/newnew1212") or "pythonanywhere" in os.getcwd().lower() or os.path.exists("/etc/pythonanywhere"):
+            proxy_url = "http://proxy.server:3128"
+
+    if proxy_url:
+        logger.info(f"Using HTTP Proxy: {proxy_url}")
+        session = AiohttpSession(proxy=proxy_url)
+        bot = Bot(token=BOT_TOKEN, session=session)
+    else:
+        bot = Bot(token=BOT_TOKEN)
+
     dp = Dispatcher()
     dp.include_router(main_router)
 
-    # Initialize APScheduler for background ticket checks
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
         check_all_subscriptions,
         "interval",
         minutes=CHECK_INTERVAL_MINUTES,
         args=[bot],
-        id="rzd_ticket_checker"
+        id="check_all_subscriptions"
     )
     scheduler.start()
     logger.info(f"Background ticket checker scheduled every {CHECK_INTERVAL_MINUTES} minute(s).")
