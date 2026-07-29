@@ -32,8 +32,6 @@ class SubscriptionFSM(StatesGroup):
 def get_cancel_button() -> List[InlineKeyboardButton]:
     return [InlineKeyboardButton(text="❌ Отменить подписку", callback_data="nav_cancel")]
 
-# --- Global Navigation Callbacks ---
-
 @router.callback_query(F.data == "nav_cancel")
 async def nav_cancel_handler(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
@@ -65,6 +63,10 @@ async def start_subscription(message: types.Message, state: FSMContext):
 @router.message(SubscriptionFSM.selecting_origin_station)
 async def process_origin_query(message: types.Message, state: FSMContext):
     query = message.text.strip()
+    if query in ["📋 Мои подписки", "➕ Создать подписку", "ℹ️ Справка"] or query.startswith("/"):
+        await state.clear()
+        return
+
     msg_wait = None
     try:
         msg_wait = await message.answer("🔍 Ищем станции в РЖД...")
@@ -133,6 +135,10 @@ async def ask_destination_step(message: types.Message, state: FSMContext):
 @router.message(SubscriptionFSM.selecting_destination_station)
 async def process_destination_query(message: types.Message, state: FSMContext):
     query = message.text.strip()
+    if query in ["📋 Мои подписки", "➕ Создать подписку", "ℹ️ Справка"] or query.startswith("/"):
+        await state.clear()
+        return
+
     msg_wait = None
     try:
         msg_wait = await message.answer("🔍 Ищем станции в РЖД...")
@@ -216,6 +222,10 @@ async def process_quick_date(callback: types.CallbackQuery, state: FSMContext):
 @router.message(SubscriptionFSM.waiting_for_date)
 async def process_text_date(message: types.Message, state: FSMContext):
     text = message.text.strip()
+    if text in ["📋 Мои подписки", "➕ Создать подписку", "ℹ️ Справка"] or text.startswith("/"):
+        await state.clear()
+        return
+
     try:
         if ":" in text:
             parts = text.split(":")
@@ -529,6 +539,10 @@ async def select_train_number(callback: types.CallbackQuery, state: FSMContext):
 @router.message(SubscriptionFSM.waiting_for_train_number)
 async def process_train_number(message: types.Message, state: FSMContext):
     train_no = message.text.strip().upper()
+    if train_no in ["📋 МОИ ПОДПИСКИ", "➕ СОЗДАТЬ ПОДПИСКУ", "ℹ️ СПРАВКА"] or train_no.startswith("/"):
+        await state.clear()
+        return
+
     await state.update_data(train_number=train_no, train_departure="")
     await message.answer(f"✅ Выбран поезд: **№{train_no}**", parse_mode="Markdown")
     await finish_subscription(message, state, user_id=message.from_user.id)
