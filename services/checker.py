@@ -7,10 +7,7 @@ from db import (
     increment_error_count,
     mark_error_notified,
     clear_error_notified_flag,
-    get_user_settings,
-    get_bot_meta,
-    set_bot_meta,
-    get_all_user_ids
+    get_user_settings
 )
 from rzd_service import check_train_tickets_for_date_range
 
@@ -101,46 +98,9 @@ def format_recovery_notification(sub: dict) -> str:
     )
     return msg
 
-async def check_host_extension_reminder(bot: Bot):
-    try:
-        start_date_str = await get_bot_meta("server_start_date")
-        if not start_date_str:
-            return
-        
-        start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-        days_passed = (date.today() - start_date).days
-        days_in_cycle = days_passed % 90
-        
-        if days_in_cycle >= 80:
-            last_notified = await get_bot_meta("last_host_notified_at")
-            today_str = date.today().strftime("%Y-%m-%d")
-
-            if last_notified != today_str:
-                user_ids = await get_all_user_ids()
-                days_left = 90 - days_in_cycle
-                reminder_msg = (
-                    f"⏰ **НАПОМИНАНИЕ О ПРОДЛЕНИИ СЕРВЕРА PythonAnywhere!**\n\n"
-                    f"Прошло **{days_passed} дн.** с момента запуска бота.\n"
-                    f"До истечения 3-месячного периода осталось около **{days_left} дн.**\n\n"
-                    f"Чтобы бот продолжал отслеживать билеты РЖД 24/7 и не уснул, нажмите на ссылку и нажмите кнопку продления:\n\n"
-                    f"🔗 [Перейти на PythonAnywhere для продления](https://www.pythonanywhere.com/)\n\n"
-                    f"*(Зайдите под своим логином `newnew1212` и нажмите «Run for another 3 months»)*"
-                )
-                for uid in user_ids:
-                    try:
-                        await bot.send_message(chat_id=uid, text=reminder_msg, parse_mode="Markdown")
-                    except Exception as e:
-                        logger.error(f"Failed to send host extension reminder to user {uid}: {e}")
-                
-                await set_bot_meta("last_host_notified_at", today_str)
-    except Exception as e:
-        logger.error(f"Error checking host extension reminder: {e}")
-
 async def check_all_subscriptions(bot: Bot):
     logger.info("Running background check for active ticket subscriptions...")
     try:
-        await check_host_extension_reminder(bot)
-
         active_subs = await get_all_active_subscriptions()
         if not active_subs:
             logger.info("No active subscriptions to check.")
