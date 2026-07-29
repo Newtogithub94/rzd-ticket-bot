@@ -7,7 +7,10 @@ from db import (
     increment_error_count,
     mark_error_notified,
     clear_error_notified_flag,
-    get_user_settings
+    get_user_settings,
+    get_bot_meta,
+    set_bot_meta,
+    get_all_user_ids
 )
 from rzd_service import check_train_tickets_for_date_range
 
@@ -21,10 +24,8 @@ def is_in_dnd_period(settings: dict) -> bool:
     end = settings.get("dnd_end", 7)
 
     if start > end:
-        # e.g. 23:00 to 07:00
         return current_hour >= start or current_hour < end
     else:
-        # e.g. 01:00 to 06:00
         return start <= current_hour < end
 
 def format_ticket_notification(sub: dict, trains: list) -> (str, float):
@@ -100,9 +101,46 @@ def format_recovery_notification(sub: dict) -> str:
     )
     return msg
 
+async def check_host_extension_reminder(bot: Bot):
+    try:
+        start_date_str = await get_bot_meta("server_start_date")
+        if not start_date_str:
+            return
+        
+        start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+        days_passed = (date.today() - start_date).days
+        days_in_cycle = days_passed % 90
+        
+        if days_in_cycle >= 80:
+            last_notified = await get_bot_meta("last_host_notified_at")
+            today_str = date.today().strftime("%Y-%m-%d")
+
+            if last_notified != today_str:
+                user_ids = await get_all_user_ids()
+                days_left = 90 - days_in_cycle
+                reminder_msg = (
+                    f"⏰ **НАПОМИНАНИЕ О ПРОДЛЕНИИ СЕРВЕРА PythonAnywhere!**\n\n"
+                    f"Прошло **{days_passed} дн.** с момента запуска бота.\n"
+                    f"До истечения 3-месячного периода осталось около **{days_left} дн.**\n\n"
+                    f"Чтобы бот продолжал отслеживать билеты РЖД 24/7 и не уснул, нажмите на ссылку и нажмите кнопку продления:\n\n"
+                    f"🔗 [Перейти на PythonAnywhere для продления](https://www.pythonanywhere.com/)\n\n"
+                    f"*(Зайдите под своим логином `newnew1212` и нажмите «Run for another 3 months»)*"
+                )
+                for uid in user_ids:
+                    try:
+                        await bot.send_message(chat_id=uid, text=reminder_msg, parse_mode="Markdown")
+                    except Exception as e:
+                        logger.error(f"Failed to send host extension reminder to user {uid}: {e}")
+                
+                await set_bot_meta("last_host_notified_at", today_str)
+    except Exception as e:
+        logger.error(f"Error checking host extension reminder: {e}")
+
 async def check_all_subscriptions(bot: Bot):
     logger.info("Running background check for active ticket subscriptions...")
     try:
+        await check_host_extension_reminder(bot)
+
         active_subs = await get_all_active_subscriptions()
         if not active_subs:
             logger.info("No active subscriptions to check.")
@@ -137,7 +175,6 @@ async def check_all_subscriptions(bot: Bot):
                     train_number_filter=sub.get('train_number', '')
                 )
 
-                # Connection successful! Check if recovery message needed
                 was_error_active = await clear_error_notified_flag(sub_id)
                 if was_error_active:
                     recovery_msg = format_recovery_notification(sub)
@@ -150,7 +187,6 @@ async def check_all_subscriptions(bot: Bot):
                 if trains:
                     notification_text, min_p = format_ticket_notification(sub, trains)
                     
-                    # Check DND period
                     user_sett = await get_user_settings(user_id)
                     in_dnd = is_in_dnd_period(user_sett)
 
@@ -171,9 +207,6 @@ async def check_all_subscriptions(bot: Bot):
                 logger.error(f"Error checking subscription #{sub_id}: {sub_err}")
                 err_count = await increment_error_count(sub_id)
                 
-                # Error notification logic:
-                # First alert after 3 consecutive failures.
-                # Repeat every 30 minutes SILENTLY (disable_notification=True).
                 last_notified_str = sub.get('last_error_notified_at')
                 should_notify = False
                 is_subsequent = False
@@ -196,7 +229,7 @@ async def check_all_subscriptions(bot: Bot):
                             chat_id=user_id,
                             text=err_text,
                             parse_mode="Markdown",
-                            disable_notification=is_subsequent  # Silent notification for repeats!
+                            disable_notification=is_subsequent
                         )
                     except Exception as e:
                         logger.error(f"Could not send error notification to user {user_id}: {e}")
