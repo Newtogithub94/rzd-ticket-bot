@@ -1,7 +1,8 @@
+from datetime import datetime, date
 from aiogram import Router, types
 from aiogram.filters import CommandStart, Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from db import register_user
+from db import register_user, get_bot_meta
 
 router = Router()
 
@@ -41,3 +42,25 @@ async def cmd_help(message: types.Message):
         "В разделе **«📋 Мои подписки»** вы можете отключать или удалять ненужные подписки."
     )
     await message.answer(help_text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
+
+@router.message(Command("server"))
+async def cmd_server(message: types.Message):
+    start_date_str = await get_bot_meta("server_start_date") or date.today().strftime("%Y-%m-%d")
+    try:
+        start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+        days_passed = (date.today() - start_date).days
+    except Exception:
+        days_passed = 0
+
+    days_in_cycle = days_passed % 90
+    days_left = 90 - days_in_cycle
+
+    text = (
+        f"🌐 **СТАТУС И ПРОДЛЕНИЕ СЕРВЕРА PythonAnywhere**\n\n"
+        f"🗓 **Дата первого запуска:** `{start_date_str}`\n"
+        f"⏱ **Дней в работе:** {days_passed} дн.\n"
+        f"⏳ **До необходимости продления:** ~{days_left} дн.\n\n"
+        f"🔗 [Открыть PythonAnywhere для продления](https://www.pythonanywhere.com/)\n"
+        f"*(Войдите под логином `newnew1212` и нажмите «Run for another 3 months»)*"
+    )
+    await message.answer(text, parse_mode="Markdown", disable_web_page_preview=True)
