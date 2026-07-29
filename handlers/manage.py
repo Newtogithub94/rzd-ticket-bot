@@ -50,7 +50,7 @@ async def list_my_subscriptions(message: types.Message):
     header_text = f"📋 **Ваши подписки (всего: {len(subs)} | 🟢 активных: {active_cnt} | 🔴 на паузе: {paused_cnt}):**"
     await message.answer(header_text, parse_mode="Markdown")
 
-    for sub in subs:
+    for idx, sub in enumerate(subs, 1):
         sub_id = sub['id']
         status_icon = "🟢 Активна" if sub['status'] == "active" else "🔴 На паузе"
         car_str = CAR_NAMES.get(sub['car_type'], sub['car_type'])
@@ -74,7 +74,7 @@ async def list_my_subscriptions(message: types.Message):
         d_display = d_start if d_start == d_end else f"с {d_start} по {d_end}"
 
         text = (
-            f"🎫 **Подписка #{sub_id}** ({status_icon})\n\n"
+            f"🎫 **Подписка №{idx}** ({status_icon})\n\n"
             f"📍 **Маршрут:** {sub['origin_name']} ➡️ {sub['destination_name']}\n"
             f"📅 **Дата:** {d_display}\n"
             f"🛋 **Вагон:** {car_str} | 👥 **Места:** {seats_count}\n"
@@ -105,7 +105,7 @@ async def callback_toggle_sub(callback: types.CallbackQuery):
 
     if new_status:
         status_name = "активирована 🟢" if new_status == "active" else "поставлена на паузу 🔴"
-        await callback.answer(f"Подписка #{sub_id} {status_name}")
+        await callback.answer(f"Подписка {status_name}")
         try:
             await callback.message.edit_text(
                 f"{callback.message.text}\n\n*(Статус изменен: {status_name})*",
@@ -125,7 +125,7 @@ async def callback_delete_sub(callback: types.CallbackQuery):
     if success:
         await callback.answer("🗑 Подписка удалена")
         try:
-            await callback.message.edit_text(f"❌ **Подписка #{sub_id} удалена.**", parse_mode="Markdown")
+            await callback.message.edit_text("❌ **Подписка удалена.**", parse_mode="Markdown")
         except Exception:
             pass
     else:
@@ -162,7 +162,7 @@ async def callback_check_now(callback: types.CallbackQuery):
         await callback.message.reply(notification_text, parse_mode="Markdown", disable_web_page_preview=True)
     else:
         await callback.message.reply(
-            f"ℹ️ **Результат проверки по подписке #{sub_id}:**\n"
+            f"ℹ️ **Результат проверки по подписке:**\n"
             f"Мест по вашим критериям на {target_sub['date']} пока нет. Бот продолжит отслеживание!",
             parse_mode="Markdown"
         )

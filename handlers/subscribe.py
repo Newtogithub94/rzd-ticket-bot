@@ -587,7 +587,7 @@ async def finish_subscription(message: types.Message, state: FSMContext, user_id
     seats_cnt = data.get('min_seats_count', 1)
 
     summary = (
-        f"🎉 **ПОДПИСКА УСПЕШНО СОЗДАНА!** (# {sub_id})\n\n"
+        f"🎉 **ПОДПИСКА УСПЕШНО СОЗДАНА!**\n\n"
         f"📍 **Маршрут:** {data['origin_name']} ➡️ {data['destination_name']}\n"
         f"📅 **Дата:** {d_display}\n"
         f"🛋 **Вагон:** {car_str} | 👥 **Места:** {seats_cnt}\n"
