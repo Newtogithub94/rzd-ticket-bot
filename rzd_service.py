@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import httpx
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Any, Optional
 from rzd_api import RzdClient
@@ -27,10 +28,53 @@ def _sync_find_stations(query: str) -> List[Dict[str, str]]:
             })
         return result
     except Exception as e:
-        logger.error(f"Error finding stations for query '{query}': {e}")
+        logger.error(f"Error finding stations via rzd_api for query '{query}': {e}")
         return []
     finally:
-        client.close()
+        try:
+            client.close()
+        except Exception:
+            pass
+
+async def _direct_find_stations(query: str) -> List[Dict[str, str]]:
+    url = "https://ticket.rzd.ru/api/v1/suggests"
+    params = {
+        "Query": query,
+        "TransportType": "rail,suburban",
+        "GroupResults": "true",
+        "RailwaySortPriority": "true",
+        "SynonymOn": "1",
+        "Language": "ru"
+    }
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json"
+    }
+    try:
+        async with httpx.AsyncClient(timeout=7.0, follow_redirects=True) as client:
+            resp = await client.get(url, params=params, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                city_items = data.get("cityGroup", {}).get("items", []) or []
+                station_items = data.get("stationGroup", {}).get("items", []) or []
+                res = []
+                seen_codes = set()
+                for item in city_items + station_items:
+                    name = item.get("name") or item.get("expressName")
+                    code = item.get("expressCode") or item.get("code")
+                    if name and code and str(code) not in seen_codes:
+                        seen_codes.add(str(code))
+                        res.append({"name": str(name), "code": str(code)})
+                return res
+    except Exception as e:
+        logger.error(f"Direct httpx find_stations failed for '{query}': {e}")
+    return []
+
+async def find_stations(query: str) -> List[Dict[str, str]]:
+    res = await _direct_find_stations(query)
+    if res:
+        return res
+    return await asyncio.to_thread(_sync_find_stations, query)
 
 def _sync_search_tickets(origin_code: str, destination_code: str, date_obj: date) -> List[Any]:
     client = RzdClient()
@@ -45,7 +89,10 @@ def _sync_search_tickets(origin_code: str, destination_code: str, date_obj: date
         logger.error(f"Error searching tickets from {origin_code} to {destination_code} on {date_obj}: {e}")
         raise e
     finally:
-        client.close()
+        try:
+            client.close()
+        except Exception:
+            pass
 
 def _get_departure_str(item) -> str:
     dep = getattr(item, "departure_time", None) or getattr(item, "departure_date_time", None)
@@ -67,9 +114,6 @@ def _format_time_only(datetime_str: str) -> str:
     if " " in datetime_str:
         return datetime_str.split(" ")[1][:5]
     return datetime_str[:5]
-
-async def find_stations(query: str) -> List[Dict[str, str]]:
-    return await asyncio.to_thread(_sync_find_stations, query)
 
 async def get_train_schedule(origin_code: str, destination_code: str, target_date: date) -> List[Dict[str, Any]]:
     try:
@@ -201,22 +245,4 @@ async def check_train_tickets(
     origin_code: str,
     destination_code: str,
     target_date: date,
-    car_type_filter: str = "ANY",
-    lower_seats_only: bool = False,
-    upper_seats_only: bool = False,
-    no_side_seats: bool = False,
-    min_seats_count: int = 1,
-    train_number_filter: str = ""
-) -> List[Dict[str, Any]]:
-    return await check_train_tickets_for_date_range(
-        origin_code=origin_code,
-        destination_code=destination_code,
-        date_start=target_date,
-        date_end=target_date,
-        car_type_filter=car_type_filter,
-        lower_seats_only=lower_seats_only,
-        upper_seats_only=upper_seats_only,
-        no_side_seats=no_side_seats,
-        min_seats_count=min_seats_count,
-        train_number_filter=train_number_filter
-    )
+    car_type_filter: str = "
